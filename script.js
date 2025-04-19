@@ -38,9 +38,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const bladeHeight = 35 + Math.random() * 25; // Shorter: 35px to 60px
             const bladeWidth = 5 + Math.random() * 5;   // Wider: 5px to 10px
             const hueVariation = (Math.random() - 0.5) * 25; // More hue variation
-            const lightnessVariation = Math.random() * 25; // More lightness variation
-            const color1 = `hsl(${115 + hueVariation}, 65%, ${30 + lightnessVariation}%)`; // Adjusted base lightness
-            const color2 = `hsl(${120 + hueVariation}, 55%, ${50 + lightnessVariation}%)`; // Adjusted tip lightness
+            const lightnessVariation = Math.random() * 10; // Further reduced variation range
+            const color1 = `hsl(${115 + hueVariation}, 65%, ${12 + lightnessVariation}%)`; // Even Darker base lightness (12-22%)
+            const color2 = `hsl(${120 + hueVariation}, 55%, ${25 + lightnessVariation}%)`; // Even Darker tip lightness (25-35%)
             
             // Position (Still within original world dimensions)
             const x = Math.random() * width;
