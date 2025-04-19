@@ -11,21 +11,37 @@ document.addEventListener('DOMContentLoaded', () => {
     let height = canvas.height = window.innerHeight;
     let blades = [];
 
-    // --- Zoom & Viewport --- 
-    const zoomLevel = 2.5; // <<< Set zoom level (e.g., 2.5x)
-    let viewX = 0; // Top-left corner of the visible world area (for culling)
+    // --- Parameter Variables (Moved up for correct initialization order) ---
+    let currentZoomLevel = 2.5; // New Default Zoom
+    let currentDensity = 0.25; // New Default Density
+    let currentInteractionRadiusBase = 150; // New Default Base Radius (max slider range)
+
+    // --- Calculated Interaction Radius (update when zoom or base radius changes) ---
+    let interactionRadius = currentInteractionRadiusBase / currentZoomLevel; 
+
+    // --- Viewport Variables (Initialization moved inside updateAndDraw) ---
+    let viewX = 0; 
     let viewY = 0;
-    let viewWidth = width / zoomLevel;
-    let viewHeight = height / zoomLevel;
+    // let viewWidth = width / zoomLevel; // Removed old calculation
+    // let viewHeight = height / zoomLevel; // Removed old calculation
 
     // --- Interaction Variables --- 
-    const interactionRadius = 60 / zoomLevel; // Adjust radius for world coordinates
-    const maxRotation = 70;
-    const scaleFactor = 0.9;
-    let worldMouseX = -interactionRadius * 2;
+    // const zoomLevel = 3.5; // Removed redundant constant
+    const MAX_ROTATION = 70;
+    const SCALE_FACTOR = 0.9;
+    const OUTER_CULLING_BUFFER = 100; // Fixed buffer for outer culling
+    let worldMouseX = -interactionRadius * 2; // Now uses correctly initialized interactionRadius
     let worldMouseY = -interactionRadius * 2;
     let mouseX = width / 2;
     let mouseY = height / 2;
+
+    // --- Control Elements ---
+    const zoomSlider = document.getElementById('zoom-slider');
+    const zoomValueSpan = document.getElementById('zoom-value');
+    const densitySlider = document.getElementById('density-slider');
+    const densityValueSpan = document.getElementById('density-value');
+    const radiusSlider = document.getElementById('radius-slider');
+    const radiusValueSpan = document.getElementById('radius-value');
 
     // --- Blade Generation Function ---
     function generateBlades() {
@@ -61,22 +77,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Update and Draw Loop ---
     function updateAndDraw() {
         // Calculate zoom offsets to keep zoom centered
-        const offsetX = (width / 2) * (1 - zoomLevel);
-        const offsetY = (height / 2) * (1 - zoomLevel);
+        const offsetX = (width / 2) * (1 - currentZoomLevel);
+        const offsetY = (height / 2) * (1 - currentZoomLevel);
 
         // Calculate the top-left corner of the visible world area more clearly
-        const visibleWorldWidth = width / zoomLevel;
-        const visibleWorldHeight = height / zoomLevel;
+        const visibleWorldWidth = width / currentZoomLevel;
+        const visibleWorldHeight = height / currentZoomLevel;
         // World coordinate of the left edge of the viewport
         viewX = (width - visibleWorldWidth) / 2; 
         // World coordinate of the top edge of the viewport
         viewY = (height - visibleWorldHeight) / 2;
-        viewWidth = visibleWorldWidth; // Assign for clarity/use in culling
-        viewHeight = visibleWorldHeight;
+        // viewWidth = visibleWorldWidth; // Assign for clarity/use in culling
+        // viewHeight = visibleWorldHeight;
 
         // Convert screen mouse coords to world mouse coords
-        worldMouseX = (mouseX - offsetX) / zoomLevel;
-        worldMouseY = (mouseY - offsetY) / zoomLevel;
+        worldMouseX = (mouseX - offsetX) / currentZoomLevel;
+        worldMouseY = (mouseY - offsetY) / currentZoomLevel;
         // Add console log for debugging coords
         // console.log(`Screen: ${mouseX.toFixed(0)},${mouseY.toFixed(0)} | World: ${worldMouseX.toFixed(0)},${worldMouseY.toFixed(0)} | View: ${viewX.toFixed(0)},${viewY.toFixed(0)}`);
 
@@ -87,7 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.save();
         // Order matters: Translate so world origin (0,0) maps to screen (offsetX, offsetY), then scale
         ctx.translate(offsetX, offsetY); 
-        ctx.scale(zoomLevel, zoomLevel);
+        ctx.scale(currentZoomLevel, currentZoomLevel);
         
 
         // Cull and draw visible blades
@@ -95,12 +111,14 @@ document.addEventListener('DOMContentLoaded', () => {
         blades.forEach(blade => {
             // TEMPORARILY DISABLE CULLING CHECK FOR DEBUGGING:
             // Check if blade *base* is roughly within the extended view for interaction
-            // <<< RE-ENABLE Outer Culling Check >>>
-            if (blade.x > viewX - interactionRadius && blade.x < viewX + viewWidth + interactionRadius &&
-                blade.y > viewY - interactionRadius && blade.y < viewY + viewHeight + interactionRadius)
+            // <<< RE-ENABLE Outer Culling Check - Use fixed buffer >>>
+            if (blade.x > viewX - OUTER_CULLING_BUFFER && blade.x < viewX + visibleWorldWidth + OUTER_CULLING_BUFFER &&
+                blade.y > viewY - OUTER_CULLING_BUFFER && blade.y < viewY + visibleWorldHeight + OUTER_CULLING_BUFFER)
             {
                 const dx = blade.x - worldMouseX;
-                const dy = blade.y - worldMouseY;
+                // Add a larger vertical offset to worldMouseY for interaction centering
+                const interactionCenterY = worldMouseY + 15; 
+                const dy = blade.y - interactionCenterY;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
                 let targetRotation = blade.initialRotation;
@@ -108,11 +126,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 if (distance < interactionRadius) {
                     const influence = Math.pow(1 - (distance / interactionRadius), 1.5);
-                    const rotationInfluence = (dx / interactionRadius) * maxRotation * influence;
+                    const rotationInfluence = (dx / interactionRadius) * MAX_ROTATION * influence;
                     targetRotation = blade.initialRotation + rotationInfluence;
                 
                     if (distance < interactionRadius * 0.4) {
-                        targetScale = 1 - (1 - scaleFactor) * (1 - distance / (interactionRadius * 0.4));
+                        targetScale = 1 - (1 - SCALE_FACTOR) * (1 - distance / (interactionRadius * 0.4));
                     }
                 }
                 
@@ -132,9 +150,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const bladeBottom = blade.y;             // Base Y
 
                 const viewLeft = viewX;
-                const viewRight = viewX + viewWidth;
+                const viewRight = viewX + visibleWorldWidth;
                 const viewTop = viewY;
-                const viewBottom = viewY + viewHeight;
+                const viewBottom = viewY + visibleWorldHeight;
 
                 // <<< RE-ENABLE Inner Culling Check >>>
                 if (bladeRight > viewLeft &&    // Blade right is right of view left
@@ -159,8 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Draw Single Blade Function ---
     function drawBlade(blade) {
-        // <<< Add log to check if this function is called >>>
-        console.log(`Drawing blade at world coords: (${blade.x.toFixed(1)}, ${blade.y.toFixed(1)})`);
+        // <<< Remove console log for performance >>>
         ctx.save();
         ctx.translate(blade.x, blade.y);
         // <<< FIX: Convert rotation degrees to radians >>>
@@ -200,8 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function calculateBladeCount() {
         // Keep density high for the *world*, culling handles performance
         const screenArea = width * height; 
-        const density = 0.6; 
-        const maxBlades = Math.min(15000, Math.max(1000, Math.floor(screenArea * density / 100)));
+        const maxBlades = Math.min(15000, Math.max(1000, Math.floor(screenArea * currentDensity / 100)));
         // Note: We could potentially generate blades for a larger virtual area
         // if we wanted panning, but for fixed zoom, this is okay.
         return maxBlades;
@@ -222,7 +238,42 @@ document.addEventListener('DOMContentLoaded', () => {
         mouseY = height / 2;
     });
 
+    // --- Initialize Controls & Add Listeners ---
+    function initializeControls() {
+        // Set initial slider values and text displays using updated defaults
+        zoomSlider.value = currentZoomLevel;
+        zoomValueSpan.textContent = currentZoomLevel.toFixed(1);
+        densitySlider.value = currentDensity;
+        densityValueSpan.textContent = currentDensity.toFixed(2);
+        radiusSlider.value = currentInteractionRadiusBase;
+        radiusValueSpan.textContent = currentInteractionRadiusBase.toFixed(0);
+
+        // Zoom Slider Listener
+        zoomSlider.addEventListener('input', (e) => {
+            currentZoomLevel = parseFloat(e.target.value);
+            zoomValueSpan.textContent = currentZoomLevel.toFixed(1);
+            interactionRadius = currentInteractionRadiusBase / currentZoomLevel; // Assign, don't redeclare
+            // No need to regenerate blades, zoom affects drawing loop
+        });
+
+        // Density Slider Listener
+        densitySlider.addEventListener('input', (e) => {
+            currentDensity = parseFloat(e.target.value);
+            densityValueSpan.textContent = currentDensity.toFixed(2);
+            generateBlades(); // Regenerate blades with new density
+        });
+
+        // Radius Slider Listener
+        radiusSlider.addEventListener('input', (e) => {
+            currentInteractionRadiusBase = parseFloat(e.target.value);
+            radiusValueSpan.textContent = currentInteractionRadiusBase.toFixed(0);
+            interactionRadius = currentInteractionRadiusBase / currentZoomLevel; // Assign, don't redeclare
+            // No need to regenerate blades, radius affects drawing loop
+        });
+    }
+
     // --- Initial Setup ---
+    initializeControls(); // Set up sliders
     generateBlades(); 
     requestAnimationFrame(updateAndDraw);
 }); 
