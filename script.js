@@ -24,22 +24,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const scaleFactor = 0.9;
     let worldMouseX = -interactionRadius * 2;
     let worldMouseY = -interactionRadius * 2;
+    let mouseX = width / 2;
+    let mouseY = height / 2;
 
     // --- Blade Generation Function ---
     function generateBlades() {
         blades = []; 
         const bladeCount = calculateBladeCount(); 
         console.log(`Generating ${bladeCount} blades`);
-        
+                
         for (let i = 0; i < bladeCount; i++) {
-            // Appearance (Larger Blades, Adjusted Colors)
-            const bladeHeight = 50 + Math.random() * 30; 
-            const bladeWidth = 3 + Math.random() * 3;   
-            const hueVariation = (Math.random() - 0.5) * 20; // Increased hue range (-10 to +10)
-            const lightnessVariation = 10 + Math.random() * 20; // Shift base lightness slightly higher (35%-55% range)
-            // Base HSL: Slightly brighter/more saturated base
-            const color1 = `hsl(${115 + hueVariation}, 70%, ${35 + lightnessVariation}%)`; 
-            const color2 = `hsl(${120 + hueVariation}, 60%, ${45 + lightnessVariation}%)`;
+            // Appearance (Adjusted for wider, shorter, more varied blades)
+            const bladeHeight = 35 + Math.random() * 25; // Shorter: 35px to 60px
+            const bladeWidth = 5 + Math.random() * 5;   // Wider: 5px to 10px
+            const hueVariation = (Math.random() - 0.5) * 25; // More hue variation
+            const lightnessVariation = Math.random() * 25; // More lightness variation
+            const color1 = `hsl(${115 + hueVariation}, 65%, ${30 + lightnessVariation}%)`; // Adjusted base lightness
+            const color2 = `hsl(${120 + hueVariation}, 55%, ${50 + lightnessVariation}%)`; // Adjusted tip lightness
             
             // Position (Still within original world dimensions)
             const x = Math.random() * width;
@@ -92,12 +93,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Cull and draw visible blades
         let visibleCount = 0;
         blades.forEach(blade => {
+            // TEMPORARILY DISABLE CULLING CHECK FOR DEBUGGING:
             // Check if blade *base* is roughly within the extended view for interaction
+            // <<< RE-ENABLE Outer Culling Check >>>
             if (blade.x > viewX - interactionRadius && blade.x < viewX + viewWidth + interactionRadius &&
                 blade.y > viewY - interactionRadius && blade.y < viewY + viewHeight + interactionRadius)
             {
                 const dx = blade.x - worldMouseX;
-                const dy = blade.y - worldMouseY; 
+                const dy = blade.y - worldMouseY;
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 
                 let targetRotation = blade.initialRotation;
@@ -117,15 +120,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 blade.currentRotation += (targetRotation - blade.currentRotation) * lerpFactor;
                 blade.scale += (targetScale - blade.scale) * lerpFactor;
 
+                // TEMPORARILY DISABLE CULLING CHECK FOR DEBUGGING:
                 // Check if blade is strictly within view *before drawing*
-                if (blade.x + blade.w > viewX && blade.x < viewX + viewWidth &&
-                    blade.y > viewY && blade.y - blade.h < viewY + viewHeight) // Check top of blade
+                // if (blade.x + blade.w > viewX && blade.x < viewX + viewWidth &&
+                //     blade.y > viewY && blade.y - blade.h < viewY + viewHeight) // Check top of blade
+                // {
+                // <<< REPLACE with corrected AABB Culling Check >>>
+                const bladeLeft = blade.x - blade.w * 0.5; // Approx left edge
+                const bladeRight = blade.x + blade.w * 0.5; // Approx right edge
+                const bladeTop = blade.y - blade.h;      // Tip Y
+                const bladeBottom = blade.y;             // Base Y
+
+                const viewLeft = viewX;
+                const viewRight = viewX + viewWidth;
+                const viewTop = viewY;
+                const viewBottom = viewY + viewHeight;
+
+                // <<< RE-ENABLE Inner Culling Check >>>
+                if (bladeRight > viewLeft &&    // Blade right is right of view left
+                    bladeLeft < viewRight &&    // Blade left is left of view right
+                    bladeBottom > viewTop &&    // Blade base is below view top
+                    bladeTop < viewBottom)      // Blade tip is above view bottom
                 {
                     visibleCount++;
                     drawBlade(blade);
-                }
-            }
-        });
+                } // End Inner if (AABB check)
+            } // <<< Explicitly close Outer if
+        }); // <<< Explicitly close forEach lambda
+        // console.log("Total blades:", blades.length, " Attempted to draw:", visibleCount); // Modified log - REMOVE THIS LINE
+        // <<< Restore original log message >>>
         console.log("Blades Processed(near view):", blades.length, " Visible & Drawn:", visibleCount);
 
         // Restore canvas transform
@@ -136,6 +159,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Draw Single Blade Function ---
     function drawBlade(blade) {
+        // <<< Add log to check if this function is called >>>
+        console.log(`Drawing blade at world coords: (${blade.x.toFixed(1)}, ${blade.y.toFixed(1)})`);
         ctx.save();
         ctx.translate(blade.x, blade.y);
         // <<< FIX: Convert rotation degrees to radians >>>
@@ -149,23 +174,24 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.fillStyle = gradient;
         
         // Draw blade shape (using path for clip-path effect)
+        // <<< Adjust path for wider base and softer tip >>>
         ctx.beginPath();
-        ctx.moveTo(-blade.w * 0.2, 0);       // Bottom left point (adjust polygon %)
-        ctx.lineTo(blade.w * 0.2, 0);        // Bottom right
-        ctx.lineTo(blade.w * 0.4, -blade.h * 0.95); // Top right point (adjust polygon %)
-        ctx.lineTo(blade.w * 0.5, -blade.h);      // Top center point
-        ctx.lineTo(blade.w * 0.6, -blade.h * 0.95); // Top left point
+        ctx.moveTo(-blade.w * 0.4, 0);       // Wider base left
+        ctx.lineTo(blade.w * 0.4, 0);        // Wider base right
+        // Use quadratic curves for softer sides leading to the tip
+        ctx.quadraticCurveTo(blade.w * 0.3, -blade.h * 0.8, 0, -blade.h); // Curve to tip (right side)
+        ctx.quadraticCurveTo(-blade.w * 0.3, -blade.h * 0.8, -blade.w * 0.4, 0); // Curve to base (left side)
+        // Old pointy path:
+        // ctx.lineTo(blade.w * 0.4, -blade.h * 0.95); // Top right point (adjust polygon %)
+        // ctx.lineTo(blade.w * 0.5, -blade.h);      // Top center point
+        // ctx.lineTo(blade.w * 0.6, -blade.h * 0.95); // Top left point
         ctx.closePath();
         ctx.fill();
 
-        // <<< REVERT: Remove shadow logic for now >>>
-        /*
-        ctx.shadowColor = 'rgba(0,0,0,0.5)'; 
-        ctx.shadowBlur = 5;             
-        ctx.shadowOffsetY = 2;             
-        ctx.shadowOffsetX = 1;             
-        ctx.fill(); 
-        */
+        // TODO: Add subtle shadow if needed (can impact performance)
+        // ctx.shadowColor = 'rgba(0,0,0,0.3)';
+        // ctx.shadowBlur = 3;
+        // ctx.shadowOffsetY = 2;
 
         ctx.restore();
     }
@@ -192,6 +218,8 @@ document.addEventListener('DOMContentLoaded', () => {
         height = canvas.height = window.innerHeight;
         // Regenerate blades on resize 
         generateBlades(); 
+        mouseX = width / 2;
+        mouseY = height / 2;
     });
 
     // --- Initial Setup ---
