@@ -11,40 +11,30 @@ document.addEventListener('DOMContentLoaded', () => {
     let height = canvas.height = window.innerHeight;
     let blades = [];
 
-    // --- Parameter Variables (Moved up for correct initialization order) ---
-    let currentZoomLevel = 2.5; // New Default Zoom
-    let currentDensity = 0.25; // New Default Density
-    let currentInteractionRadiusBase = 150; // New Default Base Radius (max slider range)
-    let currentVolume = 0.33; // <<< NEW Default Volume (slider value)
+    let currentZoomLevel = 2.5;
+    let currentDensity = 0.25;
+    let currentInteractionRadiusBase = 150;
+    let currentVolume = 0.33;
 
-    // --- Calculated Interaction Radius (update when zoom or base radius changes) ---
-    let interactionRadius = currentInteractionRadiusBase / currentZoomLevel; 
+    let interactionRadius = currentInteractionRadiusBase / currentZoomLevel;
 
-    // --- Viewport Variables (Initialization moved inside updateAndDraw) ---
-    let viewX = 0; 
+    let viewX = 0;
     let viewY = 0;
-    // let viewWidth = width / zoomLevel; // Removed old calculation
-    // let viewHeight = height / zoomLevel; // Removed old calculation
 
-    // --- Interaction Variables --- 
-    // const zoomLevel = 3.5; // Removed redundant constant
     const MAX_ROTATION = 70;
     const SCALE_FACTOR = 0.9;
-    const OUTER_CULLING_BUFFER = 100; // Fixed buffer for outer culling
-    let worldMouseX = -interactionRadius * 2; // Now uses correctly initialized interactionRadius
+    const OUTER_CULLING_BUFFER = 100;
+    let worldMouseX = -interactionRadius * 2;
     let worldMouseY = -interactionRadius * 2;
     let mouseX = width / 2;
     let mouseY = height / 2;
 
-    // --- Click Interaction Variable ---
-    // REMOVED: let lastClick = { x: null, y: null, time: 0 };
-
-    // --- Grab Interaction Variables ---
     let grabbedBlade = null;
     let grabOffsetX = 0;
     let grabOffsetY = 0;
 
-    // --- Control Elements ---
+    let lastTimestamp = 0;
+
     const zoomSlider = document.getElementById('zoom-slider');
     const zoomValueSpan = document.getElementById('zoom-value');
     const densitySlider = document.getElementById('density-slider');
@@ -54,230 +44,185 @@ document.addEventListener('DOMContentLoaded', () => {
     const volumeSlider = document.getElementById('volume-slider');
     const volumeValueSpan = document.getElementById('volume-value');
     const backgroundAudio = document.getElementById('background-audio');
-    const unmutePrompt = document.getElementById('unmute-prompt'); 
-    const regenerateButton = document.getElementById('regenerate-button'); // <<< Get button
+    const unmutePrompt = document.getElementById('unmute-prompt');
+    const regenerateButton = document.getElementById('regenerate-button');
 
-    // --- Blade Generation Function ---
+    function createBlade(xPos, yPos) {
+        const bladeHeight = 35 + Math.random() * 25;
+        const bladeWidth = 5 + Math.random() * 5;
+        const hueVariation = (Math.random() - 0.5) * 25;
+        const lightnessVariation = Math.random() * 10;
+        const color1 = `hsl(${115 + hueVariation}, 65%, ${12 + lightnessVariation}%)`;
+        const color2 = `hsl(${120 + hueVariation}, 55%, ${25 + lightnessVariation}%)`;
+        const initialRotation = (Math.random() - 0.5) * 20;
+        const age = Math.random() * 150000;
+        const maxAge = 300000 + Math.random() * 300000;
+
+        return {
+            x: xPos, y: yPos, w: bladeWidth, h: bladeHeight,
+            color1: color1, color2: color2,
+            initialRotation: initialRotation,
+            currentRotation: initialRotation,
+            scale: 0,
+            state: 'growing',
+            age: age,
+            maxAge: maxAge
+        };
+    }
+
     function generateBlades() {
-        blades = []; 
-        const bladeCount = calculateBladeCount(); 
-        //console.log(`Generating ${bladeCount} blades`);
-                
+        blades = [];
+        const bladeCount = calculateBladeCount();
+
         for (let i = 0; i < bladeCount; i++) {
-            // Appearance (Adjusted for wider, shorter, more varied blades)
-            const bladeHeight = 35 + Math.random() * 25; // Shorter: 35px to 60px
-            const bladeWidth = 5 + Math.random() * 5;   // Wider: 5px to 10px
-            const hueVariation = (Math.random() - 0.5) * 25; // More hue variation
-            const lightnessVariation = Math.random() * 10; // Further reduced variation range
-            const color1 = `hsl(${115 + hueVariation}, 65%, ${12 + lightnessVariation}%)`; // Even Darker base lightness (12-22%)
-            const color2 = `hsl(${120 + hueVariation}, 55%, ${25 + lightnessVariation}%)`; // Even Darker tip lightness (25-35%)
-            
-            // Position (Still within original world dimensions)
             const x = Math.random() * width;
             const y = Math.random() * height;
-            const initialRotation = (Math.random() - 0.5) * 20;
-
-            blades.push({ 
-                x: x, y: y, w: bladeWidth, h: bladeHeight,
-                color1: color1, color2: color2,
-                initialRotation: initialRotation,
-                currentRotation: initialRotation, 
-                scale: 1,
-                state: 'growing' // <<< Add initial state
-            });
+            blades.push(createBlade(x, y));
         }
         blades.sort((a, b) => a.y - b.y);
 
-        // Set initial audio volume (audio starts muted in HTML)
         if (backgroundAudio) {
             backgroundAudio.volume = Math.pow(currentVolume, 3);
-            // Try playing muted initially - might work in some browsers and helps prep audio
             backgroundAudio.play().catch(e => console.log("Initial muted play failed (can be expected):", e));
         }
     }
 
-    // --- Update and Draw Loop ---
-    function updateAndDraw() {
-        // Calculate zoom offsets to keep zoom centered
+    function updateAndDraw(timestamp) {
+        const deltaTime = timestamp - lastTimestamp || (1000 / 60);
+        lastTimestamp = timestamp;
+
         const offsetX = (width / 2) * (1 - currentZoomLevel);
         const offsetY = (height / 2) * (1 - currentZoomLevel);
 
-        // Calculate the top-left corner of the visible world area more clearly
         const visibleWorldWidth = width / currentZoomLevel;
         const visibleWorldHeight = height / currentZoomLevel;
-        // World coordinate of the left edge of the viewport
-        viewX = (width - visibleWorldWidth) / 2; 
-        // World coordinate of the top edge of the viewport
+        viewX = (width - visibleWorldWidth) / 2;
         viewY = (height - visibleWorldHeight) / 2;
-        // viewWidth = visibleWorldWidth; // Assign for clarity/use in culling
-        // viewHeight = visibleWorldHeight;
 
-        // Convert screen mouse coords to world mouse coords
         worldMouseX = (mouseX - offsetX) / currentZoomLevel;
         worldMouseY = (mouseY - offsetY) / currentZoomLevel;
-        // Add console log for debugging coords
-        // console.log(`Screen: ${mouseX.toFixed(0)},${mouseY.toFixed(0)} | World: ${worldMouseX.toFixed(0)},${worldMouseY.toFixed(0)} | View: ${viewX.toFixed(0)},${viewY.toFixed(0)}`);
 
-        // Clear canvas
         ctx.clearRect(0, 0, width, height);
 
-        // Apply zoom and center transform
         ctx.save();
-        // Order matters: Translate so world origin (0,0) maps to screen (offsetX, offsetY), then scale
-        ctx.translate(offsetX, offsetY); 
+        ctx.translate(offsetX, offsetY);
         ctx.scale(currentZoomLevel, currentZoomLevel);
-        
 
-        // Cull and draw visible blades
         let visibleCount = 0;
-        blades.forEach(blade => {
-            // TEMPORARILY DISABLE CULLING CHECK FOR DEBUGGING:
-            // Check if blade *base* is roughly within the extended view for interaction
-            // <<< RE-ENABLE Outer Culling Check - Use fixed buffer >>>
+        for (let i = 0; i < blades.length; i++) {
+            const blade = blades[i];
+
             if (blade.x > viewX - OUTER_CULLING_BUFFER && blade.x < viewX + visibleWorldWidth + OUTER_CULLING_BUFFER &&
                 blade.y > viewY - OUTER_CULLING_BUFFER && blade.y < viewY + visibleWorldHeight + OUTER_CULLING_BUFFER)
             {
-                // <<< Skip further processing if already plucked >>>
                 if (blade.state === 'plucked') {
-                    return; // Use return inside forEach to skip iteration
+                    continue;
                 }
+
+                blade.age += deltaTime;
 
                 let targetRotation = blade.initialRotation;
                 let targetScale = 1;
-                const lerpFactor = 0.15; // Define lerp factor for this blade update
+                const lerpFactor = 0.05;
 
-                // --- State-Based Updates ---
-                if (blade.state === 'growing') {
-                    // Apply hover effect ONLY to growing blades
-                    const dxMouse = blade.x - worldMouseX;
-                    const interactionCenterY = worldMouseY + 15; 
-                    const dyMouse = blade.y - interactionCenterY;
-                    const distMouse = Math.sqrt(dxMouse * dxMouse + dyMouse * dyMouse);
-
-                    if (distMouse < interactionRadius) {
-                        const mouseInfluence = Math.pow(1 - (distMouse / interactionRadius), 1.5);
-                        const rotationInfluence = (dxMouse / interactionRadius) * MAX_ROTATION * mouseInfluence;
-                        targetRotation = blade.initialRotation + rotationInfluence;
-                    
-                        if (distMouse < interactionRadius * 0.4) {
-                            targetScale = 1 - (1 - SCALE_FACTOR) * (1 - distMouse / (interactionRadius * 0.4));
-                        }
-                    }
-                } else if (blade.state === 'grabbed') {
-                    // Update position to follow mouse
+                if (blade.state === 'grabbed') {
                     blade.x = worldMouseX + grabOffsetX;
                     blade.y = worldMouseY + grabOffsetY;
-                    // Reset rotation/scale while grabbed (optional)
-                    targetRotation = 0; 
-                    targetScale = 1.1; // Slightly bigger while held?
+                    targetRotation = 0;
+                    targetScale = 1.1;
                 } else if (blade.state === 'falling') {
-                    // Animate falling - rapid shrink
                     targetScale = 0;
-                    targetRotation = blade.currentRotation + 15; // Add a little spin
-                    // Check if effectively plucked
-                    if (blade.scale < 0.05) { 
+                    targetRotation = blade.currentRotation + 15;
+                    if (blade.scale < 0.05) {
                         blade.state = 'plucked';
+                        continue;
                     }
-                } else if (blade.state === 'plucked') {
-                    // Do nothing, skip drawing later
-                    // <<< This case is now handled by the `continue` at the top >>>
+                } else if (blade.state === 'wilting') {
+                    targetScale = 0;
+                    targetRotation = blade.currentRotation + 2;
+                    if (blade.scale < 0.05) {
+                        handleWiltedBlade(i);
+                        continue;
+                    }
+                } else if (blade.state === 'growing') {
+                    if (blade.age >= blade.maxAge) {
+                        blade.state = 'wilting';
+                        targetScale = 0;
+                    } else {
+                        const dxMouse = blade.x - worldMouseX;
+                        const interactionCenterY = worldMouseY + 15;
+                        const dyMouse = blade.y - interactionCenterY;
+                        const distMouse = Math.sqrt(dxMouse * dxMouse + dyMouse * dyMouse);
+
+                        if (distMouse < interactionRadius) {
+                            const mouseInfluence = Math.pow(1 - (distMouse / interactionRadius), 1.5);
+                            const rotationInfluence = (dxMouse / interactionRadius) * MAX_ROTATION * mouseInfluence;
+                            targetRotation = blade.initialRotation + rotationInfluence;
+                        
+                            if (distMouse < interactionRadius * 0.4) {
+                                targetScale = 1 - (1 - SCALE_FACTOR) * (1 - distMouse / (interactionRadius * 0.4));
+                            }
+                        }
+                    }
                 }
-                
-                // Apply lerping for smooth transitions (except maybe for grabbed position)
-                // <<< Simplified lerping application >>>
+
                 blade.currentRotation += (targetRotation - blade.currentRotation) * lerpFactor;
                 blade.scale += (targetScale - blade.scale) * lerpFactor;
 
-                // TEMPORARILY DISABLE CULLING CHECK FOR DEBUGGING:
-                // Check if blade is strictly within view *before drawing*
-                // if (blade.x + blade.w > viewX && blade.x < viewX + viewWidth &&
-                //     blade.y > viewY && blade.y - blade.h < viewY + viewHeight) // Check top of blade
-                // {
-                // <<< REPLACE with corrected AABB Culling Check >>>
-                const bladeLeft = blade.x - blade.w * 0.5; // Approx left edge
-                const bladeRight = blade.x + blade.w * 0.5; // Approx right edge
-                const bladeTop = blade.y - blade.h;      // Tip Y
-                const bladeBottom = blade.y;             // Base Y
+                const bladeLeft = blade.x - blade.w * 0.5 * blade.scale;
+                const bladeRight = blade.x + blade.w * 0.5 * blade.scale;
+                const bladeTop = blade.y - blade.h * blade.scale;
+                const bladeBottom = blade.y;
 
                 const viewLeft = viewX;
                 const viewRight = viewX + visibleWorldWidth;
                 const viewTop = viewY;
                 const viewBottom = viewY + visibleWorldHeight;
 
-                // <<< RE-ENABLE Inner Culling Check >>>
-                if (bladeRight > viewLeft &&    // Blade right is right of view left
-                    bladeLeft < viewRight &&    // Blade left is left of view right
-                    bladeBottom > viewTop &&    // Blade base is below view top
-                    bladeTop < viewBottom)      // Blade tip is above view bottom
+                if (bladeRight > viewLeft &&
+                    bladeLeft < viewRight &&
+                    bladeBottom > viewTop &&
+                    bladeTop < viewBottom)
                 {
                     visibleCount++;
-                    // <<< Only draw if not plucked >>>
-                    // <<< No need for this check now, plucked blades are skipped earlier >>>
-                    // if (blade.state !== 'plucked') { 
-                        drawBlade(blade);
-                    // }
-                } // End Inner if (AABB check)
-            } // <<< Explicitly close Outer if
-        }); // <<< Explicitly close forEach lambda
-        // console.log("Total blades:", blades.length, " Attempted to draw:", visibleCount); // Modified log - REMOVE THIS LINE
-        // <<< Restore original log message >>>
-        //console.log("Blades Processed(near view):", blades.length, " Visible & Drawn:", visibleCount);
+                    drawBlade(blade);
+                }
+            }
+        }
 
-        // Restore canvas transform
         ctx.restore();
 
         requestAnimationFrame(updateAndDraw);
     }
 
-    // --- Draw Single Blade Function ---
     function drawBlade(blade) {
-        // <<< Remove console log for performance >>>
         ctx.save();
         ctx.translate(blade.x, blade.y);
-        // <<< FIX: Convert rotation degrees to radians >>>
-        ctx.rotate(blade.currentRotation * Math.PI / 180); 
+        ctx.rotate(blade.currentRotation * Math.PI / 180);
         ctx.scale(blade.scale, blade.scale);
-        
-        // Create gradient
-        const gradient = ctx.createLinearGradient(0, 0, 0, -blade.h); // Gradient upwards
-        gradient.addColorStop(0, blade.color1); // Base color
-        gradient.addColorStop(1, blade.color2); // Tip color
+
+        const gradient = ctx.createLinearGradient(0, 0, 0, -blade.h);
+        gradient.addColorStop(0, blade.color1);
+        gradient.addColorStop(1, blade.color2);
         ctx.fillStyle = gradient;
-        
-        // Draw blade shape (using path for clip-path effect)
-        // <<< Adjust path for wider base and softer tip >>>
+
         ctx.beginPath();
-        ctx.moveTo(-blade.w * 0.4, 0);       // Wider base left
-        ctx.lineTo(blade.w * 0.4, 0);        // Wider base right
-        // Use quadratic curves for softer sides leading to the tip
-        ctx.quadraticCurveTo(blade.w * 0.3, -blade.h * 0.8, 0, -blade.h); // Curve to tip (right side)
-        ctx.quadraticCurveTo(-blade.w * 0.3, -blade.h * 0.8, -blade.w * 0.4, 0); // Curve to base (left side)
-        // Old pointy path:
-        // ctx.lineTo(blade.w * 0.4, -blade.h * 0.95); // Top right point (adjust polygon %)
-        // ctx.lineTo(blade.w * 0.5, -blade.h);      // Top center point
-        // ctx.lineTo(blade.w * 0.6, -blade.h * 0.95); // Top left point
+        ctx.moveTo(-blade.w * 0.4, 0);
+        ctx.lineTo(blade.w * 0.4, 0);
+        ctx.quadraticCurveTo(blade.w * 0.3, -blade.h * 0.8, 0, -blade.h);
+        ctx.quadraticCurveTo(-blade.w * 0.3, -blade.h * 0.8, -blade.w * 0.4, 0);
         ctx.closePath();
         ctx.fill();
-
-        // TODO: Add subtle shadow if needed (can impact performance)
-        // ctx.shadowColor = 'rgba(0,0,0,0.3)';
-        // ctx.shadowBlur = 3;
-        // ctx.shadowOffsetY = 2;
 
         ctx.restore();
     }
 
-    // --- Blade Count Calculation ---
     function calculateBladeCount() {
-        // Keep density high for the *world*, culling handles performance
-        const screenArea = width * height; 
+        const screenArea = width * height;
         const maxBlades = Math.min(15000, Math.max(1000, Math.floor(screenArea * currentDensity / 100)));
-        // Note: We could potentially generate blades for a larger virtual area
-        // if we wanted panning, but for fixed zoom, this is okay.
         return maxBlades;
     }
 
-    // --- Event Listeners ---
     document.addEventListener('mousemove', (e) => {
         mouseX = e.clientX;
         mouseY = e.clientY;
@@ -286,15 +231,12 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', () => {
         width = canvas.width = window.innerWidth;
         height = canvas.height = window.innerHeight;
-        // Regenerate blades on resize 
-        generateBlades(); 
+        generateBlades();
         mouseX = width / 2;
         mouseY = height / 2;
     });
 
-    // --- Initialize Controls & Add Listeners ---
     function initializeControls() {
-        // Set initial slider values and text displays using updated defaults
         zoomSlider.value = currentZoomLevel;
         zoomValueSpan.textContent = currentZoomLevel.toFixed(1);
         densitySlider.value = currentDensity;
@@ -304,35 +246,28 @@ document.addEventListener('DOMContentLoaded', () => {
         volumeSlider.value = currentVolume;
         volumeValueSpan.textContent = currentVolume.toFixed(2);
 
-        // Set initial audio volume
         if (backgroundAudio) {
             backgroundAudio.volume = Math.pow(currentVolume, 3);
         }
 
-        // Zoom Slider Listener
         zoomSlider.addEventListener('input', (e) => {
             currentZoomLevel = parseFloat(e.target.value);
             zoomValueSpan.textContent = currentZoomLevel.toFixed(1);
-            interactionRadius = currentInteractionRadiusBase / currentZoomLevel; // Assign, don't redeclare
-            // No need to regenerate blades, zoom affects drawing loop
+            interactionRadius = currentInteractionRadiusBase / currentZoomLevel;
         });
 
-        // Density Slider Listener
         densitySlider.addEventListener('input', (e) => {
             currentDensity = parseFloat(e.target.value);
             densityValueSpan.textContent = currentDensity.toFixed(2);
-            generateBlades(); // Regenerate blades with new density
+            generateBlades();
         });
 
-        // Radius Slider Listener
         radiusSlider.addEventListener('input', (e) => {
             currentInteractionRadiusBase = parseFloat(e.target.value);
             radiusValueSpan.textContent = currentInteractionRadiusBase.toFixed(0);
-            interactionRadius = currentInteractionRadiusBase / currentZoomLevel; // Assign, don't redeclare
-            // No need to regenerate blades, radius affects drawing loop
+            interactionRadius = currentInteractionRadiusBase / currentZoomLevel;
         });
 
-        // Volume Slider Listener
         volumeSlider.addEventListener('input', (e) => {
             currentVolume = parseFloat(e.target.value);
             volumeValueSpan.textContent = currentVolume.toFixed(2);
@@ -341,34 +276,22 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Autoplay fallback: try playing on first interaction
-        // REMOVED OLD AUTOPLAY LOGIC
-        // let hasInteracted = false;
-        // function attemptPlay() { ... }
-        // document.addEventListener('click', attemptPlay, { once: true });
-        // document.addEventListener('mousemove', attemptPlay, { once: true });
-
-        // NEW: Unmute overlay listener
         if (unmutePrompt && backgroundAudio) {
             unmutePrompt.addEventListener('click', () => {
-                //log("Prompt clicked, attempting to unmute and play.");
                 backgroundAudio.muted = false;
                 backgroundAudio.volume = Math.pow(currentVolume, 3);
-                // Ensure play is called again after unmuting
                 backgroundAudio.play().then(() => {
-                    //console.log("Audio unmuted and playing by user interaction.");
                 }).catch(error => {
                     console.error("Error playing audio after unmute:", error);
                 });
                 unmutePrompt.style.display = 'none';
-            }, { once: true }); // Only run once
+            }, { once: true });
         } else {
              if (!unmutePrompt) console.error("Unmute prompt element not found!");
              if (!backgroundAudio) console.error("Background audio element not found!");
         }
     }
 
-    // --- Regenerate Button Listener ---
     if (regenerateButton) {
         regenerateButton.addEventListener('click', () => {
             console.log("Regenerating blades...");
@@ -378,27 +301,18 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error("Regenerate button not found!");
     }
 
-    // --- Canvas Click Listener ---
-    // REMOVED old click listener
-    // canvas.addEventListener('click', (e) => { ... });
-
-    // --- NEW Mousedown Listener (Grab Start) ---
     canvas.addEventListener('mousedown', (e) => {
-        // Convert screen click coords to world coords
         const offsetX = (width / 2) * (1 - currentZoomLevel);
         const offsetY = (height / 2) * (1 - currentZoomLevel);
         const clickWorldX = (e.clientX - offsetX) / currentZoomLevel;
         const clickWorldY = (e.clientY - offsetY) / currentZoomLevel;
 
-        // Find the closest blade base within a small radius
         let closestBlade = null;
 
-        // Iterate backwards to prioritize blades drawn on top
         for (let i = blades.length - 1; i >= 0; i--) {
             const blade = blades[i];
-            if (blade.state !== 'growing') continue; // Can only grab growing blades
+            if (blade.state !== 'growing') continue;
 
-            // Check if click is within blade's approximate rectangular bounds
             const bladeLeft = blade.x - blade.w * 0.5;
             const bladeRight = blade.x + blade.w * 0.5;
             const bladeTop = blade.y - blade.h;
@@ -407,9 +321,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (clickWorldX >= bladeLeft && clickWorldX <= bladeRight &&
                 clickWorldY >= bladeTop && clickWorldY <= bladeBottom)
             {
-                // Found a blade, grab it and stop searching
                 closestBlade = blade;
-                break; // Grab the first one found (topmost)
+                break;
             }
         }
 
@@ -418,28 +331,48 @@ document.addEventListener('DOMContentLoaded', () => {
             grabbedBlade.state = 'grabbed';
             grabOffsetX = grabbedBlade.x - clickWorldX;
             grabOffsetY = grabbedBlade.y - clickWorldY;
-            //console.log("[DEBUG] Grabbed blade:", grabbedBlade.x, grabbedBlade.y);
-        } else {
-            //console.log("[DEBUG] No blade found within grab radius.");
         }
     });
 
-    // --- Mousemove Listener (Drag Update - only needs worldMouse coords) ---
-    // The existing listener already updates mouseX/mouseY, which are converted
-    // to worldMouseX/worldMouseY in updateAndDraw. We just need to use those.
-    // No new listener needed here if we update position in the update loop.
-
-    // --- Mouseup Listener (Drop End) ---
-    document.addEventListener('mouseup', () => { // Listen on document to catch release outside canvas
+    document.addEventListener('mouseup', () => {
         if (grabbedBlade) {
-            //console.log("[DEBUG] Dropping blade:", grabbedBlade.x, grabbedBlade.y);
-            grabbedBlade.state = 'falling';
-            grabbedBlade = null; // Release the blade
+            const MIN_BLADES_BEFORE_PLUCK = 50;
+            let growingBladeCount = 0;
+            for (const blade of blades) {
+                if (blade.state !== 'plucked') {
+                    growingBladeCount++;
+                }
+            }
+
+            if (growingBladeCount > MIN_BLADES_BEFORE_PLUCK) {
+                grabbedBlade.state = 'falling';
+            } else {
+                grabbedBlade.state = 'growing';
+            }
+            
+            grabbedBlade = null;
         }
     });
 
-    // --- Initial Setup ---
-    initializeControls(); // Set up sliders
-    generateBlades(); 
+    function handleWiltedBlade(index) {
+        const targetBladeCount = calculateBladeCount();
+        let currentBladeCount = 0;
+        for (const blade of blades) {
+            if (blade.state !== 'plucked') {
+                currentBladeCount++;
+            }
+        }
+
+        if (currentBladeCount <= targetBladeCount) {
+            const x = Math.random() * width;
+            const y = Math.random() * height;
+            blades[index] = createBlade(x, y);
+        } else {
+            blades[index].state = 'plucked';
+        }
+    }
+
+    initializeControls();
+    generateBlades();
     requestAnimationFrame(updateAndDraw);
 }); 
