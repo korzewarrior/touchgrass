@@ -32,13 +32,14 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`Generating ${bladeCount} blades`);
         
         for (let i = 0; i < bladeCount; i++) {
-            // Appearance (Larger Blades)
-            const bladeHeight = 50 + Math.random() * 30; // Larger: 50px to 80px
-            const bladeWidth = 3 + Math.random() * 3;   // Larger: 3px to 6px
-            const hueVariation = (Math.random() - 0.5) * 15;
-            const lightnessVariation = Math.random() * 20;
-            const color1 = `hsl(${115 + hueVariation}, 65%, ${25 + lightnessVariation}%)`;
-            const color2 = `hsl(${120 + hueVariation}, 55%, ${40 + lightnessVariation}%)`;
+            // Appearance (Larger Blades, Adjusted Colors)
+            const bladeHeight = 50 + Math.random() * 30; 
+            const bladeWidth = 3 + Math.random() * 3;   
+            const hueVariation = (Math.random() - 0.5) * 20; // Increased hue range (-10 to +10)
+            const lightnessVariation = 10 + Math.random() * 20; // Shift base lightness slightly higher (35%-55% range)
+            // Base HSL: Slightly brighter/more saturated base
+            const color1 = `hsl(${115 + hueVariation}, 70%, ${35 + lightnessVariation}%)`; 
+            const color2 = `hsl(${120 + hueVariation}, 60%, ${45 + lightnessVariation}%)`;
             
             // Position (Still within original world dimensions)
             const x = Math.random() * width;
@@ -157,10 +158,14 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.closePath();
         ctx.fill();
 
-        // TODO: Add subtle shadow if needed (can impact performance)
-        // ctx.shadowColor = 'rgba(0,0,0,0.3)';
-        // ctx.shadowBlur = 3;
-        // ctx.shadowOffsetY = 2;
+        // <<< REVERT: Remove shadow logic for now >>>
+        /*
+        ctx.shadowColor = 'rgba(0,0,0,0.5)'; 
+        ctx.shadowBlur = 5;             
+        ctx.shadowOffsetY = 2;             
+        ctx.shadowOffsetX = 1;             
+        ctx.fill(); 
+        */
 
         ctx.restore();
     }
