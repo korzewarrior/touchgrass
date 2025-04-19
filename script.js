@@ -36,6 +36,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let mouseX = width / 2;
     let mouseY = height / 2;
 
+    // --- Click Interaction Variable ---
+    // REMOVED: let lastClick = { x: null, y: null, time: 0 };
+
+    // --- Grab Interaction Variables ---
+    let grabbedBlade = null;
+    let grabOffsetX = 0;
+    let grabOffsetY = 0;
+
     // --- Control Elements ---
     const zoomSlider = document.getElementById('zoom-slider');
     const zoomValueSpan = document.getElementById('zoom-value');
@@ -47,12 +55,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const volumeValueSpan = document.getElementById('volume-value');
     const backgroundAudio = document.getElementById('background-audio');
     const unmutePrompt = document.getElementById('unmute-prompt'); 
+    const regenerateButton = document.getElementById('regenerate-button'); // <<< Get button
 
     // --- Blade Generation Function ---
     function generateBlades() {
         blades = []; 
         const bladeCount = calculateBladeCount(); 
-        console.log(`Generating ${bladeCount} blades`);
+        //console.log(`Generating ${bladeCount} blades`);
                 
         for (let i = 0; i < bladeCount; i++) {
             // Appearance (Adjusted for wider, shorter, more varied blades)
@@ -73,7 +82,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 color1: color1, color2: color2,
                 initialRotation: initialRotation,
                 currentRotation: initialRotation, 
-                scale: 1
+                scale: 1,
+                state: 'growing' // <<< Add initial state
             });
         }
         blades.sort((a, b) => a.y - b.y);
@@ -127,26 +137,54 @@ document.addEventListener('DOMContentLoaded', () => {
             if (blade.x > viewX - OUTER_CULLING_BUFFER && blade.x < viewX + visibleWorldWidth + OUTER_CULLING_BUFFER &&
                 blade.y > viewY - OUTER_CULLING_BUFFER && blade.y < viewY + visibleWorldHeight + OUTER_CULLING_BUFFER)
             {
-                const dx = blade.x - worldMouseX;
-                // Add a larger vertical offset to worldMouseY for interaction centering
-                const interactionCenterY = worldMouseY + 15; 
-                const dy = blade.y - interactionCenterY;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
+                // <<< Skip further processing if already plucked >>>
+                if (blade.state === 'plucked') {
+                    return; // Use return inside forEach to skip iteration
+                }
+
                 let targetRotation = blade.initialRotation;
                 let targetScale = 1;
-                
-                if (distance < interactionRadius) {
-                    const influence = Math.pow(1 - (distance / interactionRadius), 1.5);
-                    const rotationInfluence = (dx / interactionRadius) * MAX_ROTATION * influence;
-                    targetRotation = blade.initialRotation + rotationInfluence;
-                
-                    if (distance < interactionRadius * 0.4) {
-                        targetScale = 1 - (1 - SCALE_FACTOR) * (1 - distance / (interactionRadius * 0.4));
+                const lerpFactor = 0.15; // Define lerp factor for this blade update
+
+                // --- State-Based Updates ---
+                if (blade.state === 'growing') {
+                    // Apply hover effect ONLY to growing blades
+                    const dxMouse = blade.x - worldMouseX;
+                    const interactionCenterY = worldMouseY + 15; 
+                    const dyMouse = blade.y - interactionCenterY;
+                    const distMouse = Math.sqrt(dxMouse * dxMouse + dyMouse * dyMouse);
+
+                    if (distMouse < interactionRadius) {
+                        const mouseInfluence = Math.pow(1 - (distMouse / interactionRadius), 1.5);
+                        const rotationInfluence = (dxMouse / interactionRadius) * MAX_ROTATION * mouseInfluence;
+                        targetRotation = blade.initialRotation + rotationInfluence;
+                    
+                        if (distMouse < interactionRadius * 0.4) {
+                            targetScale = 1 - (1 - SCALE_FACTOR) * (1 - distMouse / (interactionRadius * 0.4));
+                        }
                     }
+                } else if (blade.state === 'grabbed') {
+                    // Update position to follow mouse
+                    blade.x = worldMouseX + grabOffsetX;
+                    blade.y = worldMouseY + grabOffsetY;
+                    // Reset rotation/scale while grabbed (optional)
+                    targetRotation = 0; 
+                    targetScale = 1.1; // Slightly bigger while held?
+                } else if (blade.state === 'falling') {
+                    // Animate falling - rapid shrink
+                    targetScale = 0;
+                    targetRotation = blade.currentRotation + 15; // Add a little spin
+                    // Check if effectively plucked
+                    if (blade.scale < 0.05) { 
+                        blade.state = 'plucked';
+                    }
+                } else if (blade.state === 'plucked') {
+                    // Do nothing, skip drawing later
+                    // <<< This case is now handled by the `continue` at the top >>>
                 }
                 
-                const lerpFactor = 0.15; 
+                // Apply lerping for smooth transitions (except maybe for grabbed position)
+                // <<< Simplified lerping application >>>
                 blade.currentRotation += (targetRotation - blade.currentRotation) * lerpFactor;
                 blade.scale += (targetScale - blade.scale) * lerpFactor;
 
@@ -173,13 +211,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     bladeTop < viewBottom)      // Blade tip is above view bottom
                 {
                     visibleCount++;
-                    drawBlade(blade);
+                    // <<< Only draw if not plucked >>>
+                    // <<< No need for this check now, plucked blades are skipped earlier >>>
+                    // if (blade.state !== 'plucked') { 
+                        drawBlade(blade);
+                    // }
                 } // End Inner if (AABB check)
             } // <<< Explicitly close Outer if
         }); // <<< Explicitly close forEach lambda
         // console.log("Total blades:", blades.length, " Attempted to draw:", visibleCount); // Modified log - REMOVE THIS LINE
         // <<< Restore original log message >>>
-        console.log("Blades Processed(near view):", blades.length, " Visible & Drawn:", visibleCount);
+        //console.log("Blades Processed(near view):", blades.length, " Visible & Drawn:", visibleCount);
 
         // Restore canvas transform
         ctx.restore();
@@ -309,12 +351,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // NEW: Unmute overlay listener
         if (unmutePrompt && backgroundAudio) {
             unmutePrompt.addEventListener('click', () => {
-                console.log("Prompt clicked, attempting to unmute and play.");
+                //log("Prompt clicked, attempting to unmute and play.");
                 backgroundAudio.muted = false;
                 backgroundAudio.volume = Math.pow(currentVolume, 3);
                 // Ensure play is called again after unmuting
                 backgroundAudio.play().then(() => {
-                    console.log("Audio unmuted and playing by user interaction.");
+                    //console.log("Audio unmuted and playing by user interaction.");
                 }).catch(error => {
                     console.error("Error playing audio after unmute:", error);
                 });
@@ -325,6 +367,76 @@ document.addEventListener('DOMContentLoaded', () => {
              if (!backgroundAudio) console.error("Background audio element not found!");
         }
     }
+
+    // --- Regenerate Button Listener ---
+    if (regenerateButton) {
+        regenerateButton.addEventListener('click', () => {
+            console.log("Regenerating blades...");
+            generateBlades();
+        });
+    } else {
+        console.error("Regenerate button not found!");
+    }
+
+    // --- Canvas Click Listener ---
+    // REMOVED old click listener
+    // canvas.addEventListener('click', (e) => { ... });
+
+    // --- NEW Mousedown Listener (Grab Start) ---
+    canvas.addEventListener('mousedown', (e) => {
+        // Convert screen click coords to world coords
+        const offsetX = (width / 2) * (1 - currentZoomLevel);
+        const offsetY = (height / 2) * (1 - currentZoomLevel);
+        const clickWorldX = (e.clientX - offsetX) / currentZoomLevel;
+        const clickWorldY = (e.clientY - offsetY) / currentZoomLevel;
+
+        // Find the closest blade base within a small radius
+        let closestBlade = null;
+
+        // Iterate backwards to prioritize blades drawn on top
+        for (let i = blades.length - 1; i >= 0; i--) {
+            const blade = blades[i];
+            if (blade.state !== 'growing') continue; // Can only grab growing blades
+
+            // Check if click is within blade's approximate rectangular bounds
+            const bladeLeft = blade.x - blade.w * 0.5;
+            const bladeRight = blade.x + blade.w * 0.5;
+            const bladeTop = blade.y - blade.h;
+            const bladeBottom = blade.y;
+
+            if (clickWorldX >= bladeLeft && clickWorldX <= bladeRight &&
+                clickWorldY >= bladeTop && clickWorldY <= bladeBottom)
+            {
+                // Found a blade, grab it and stop searching
+                closestBlade = blade;
+                break; // Grab the first one found (topmost)
+            }
+        }
+
+        if (closestBlade) {
+            grabbedBlade = closestBlade;
+            grabbedBlade.state = 'grabbed';
+            grabOffsetX = grabbedBlade.x - clickWorldX;
+            grabOffsetY = grabbedBlade.y - clickWorldY;
+            //console.log("[DEBUG] Grabbed blade:", grabbedBlade.x, grabbedBlade.y);
+        } else {
+            //console.log("[DEBUG] No blade found within grab radius.");
+        }
+    });
+
+    // --- Mousemove Listener (Drag Update - only needs worldMouse coords) ---
+    // The existing listener already updates mouseX/mouseY, which are converted
+    // to worldMouseX/worldMouseY in updateAndDraw. We just need to use those.
+    // No new listener needed here if we update position in the update loop.
+
+    // --- Mouseup Listener (Drop End) ---
+    document.addEventListener('mouseup', () => { // Listen on document to catch release outside canvas
+        if (grabbedBlade) {
+            //console.log("[DEBUG] Dropping blade:", grabbedBlade.x, grabbedBlade.y);
+            grabbedBlade.state = 'falling';
+            grabbedBlade = null; // Release the blade
+        }
+    });
 
     // --- Initial Setup ---
     initializeControls(); // Set up sliders
