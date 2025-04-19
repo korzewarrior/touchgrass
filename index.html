@@ -22,7 +22,7 @@
         </div>
         <div class="control-group">
             <label for="density-slider">Density:</label>
-            <input type="range" id="density-slider" min="0.1" max="10.0" step="0.05">
+            <input type="range" id="density-slider" min="0.1" max="7.0" step="0.05">
             <span id="density-value"></span>
         </div>
         <div class="control-group">
@@ -34,6 +34,11 @@
             <label for="volume-slider">Volume:</label>
             <input type="range" id="volume-slider" min="0" max="1" step="0.01">
             <span id="volume-value"></span>
+        </div>
+        <div class="control-group">
+            <label for="force-slider">Force:</label>
+            <input type="range" id="force-slider" min="10" max="300" step="1" value="110">
+            <span id="force-value"></span>
         </div>
         <button id="regenerate-button">Regenerate</button>
     </div>

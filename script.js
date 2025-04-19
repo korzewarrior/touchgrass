@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let blades = [];
 
     let currentZoomLevel = 2.5;
-    let currentDensity = 0.25;
+    let currentDensity = 1.5;
     let currentInteractionRadiusBase = 150;
     let currentVolume = 0.33;
 
@@ -46,6 +46,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const backgroundAudio = document.getElementById('background-audio');
     const unmutePrompt = document.getElementById('unmute-prompt');
     const regenerateButton = document.getElementById('regenerate-button');
+    const forceSlider = document.getElementById('force-slider');
+    const forceValueSpan = document.getElementById('force-value');
+
+    let currentInteractionForce = 110;
 
     function createBlade(xPos, yPos) {
         const bladeHeight = 35 + Math.random() * 25;
@@ -156,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         if (distMouse < interactionRadius) {
                             const mouseInfluence = Math.pow(1 - (distMouse / interactionRadius), 1.5);
-                            const rotationInfluence = (dxMouse / interactionRadius) * MAX_ROTATION * mouseInfluence;
+                            const rotationInfluence = (dxMouse / interactionRadius) * currentInteractionForce * mouseInfluence;
                             targetRotation = blade.initialRotation + rotationInfluence;
                         
                             if (distMouse < interactionRadius * 0.4) {
@@ -245,6 +249,8 @@ document.addEventListener('DOMContentLoaded', () => {
         radiusValueSpan.textContent = currentInteractionRadiusBase.toFixed(0);
         volumeSlider.value = currentVolume;
         volumeValueSpan.textContent = currentVolume.toFixed(2);
+        forceSlider.value = currentInteractionForce;
+        forceValueSpan.textContent = currentInteractionForce.toFixed(0);
 
         if (backgroundAudio) {
             backgroundAudio.volume = Math.pow(currentVolume, 3);
@@ -274,6 +280,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (backgroundAudio) {
                 backgroundAudio.volume = Math.pow(currentVolume, 3);
             }
+        });
+
+        forceSlider.addEventListener('input', (e) => {
+            currentInteractionForce = parseFloat(e.target.value);
+            forceValueSpan.textContent = currentInteractionForce.toFixed(0);
         });
 
         if (unmutePrompt && backgroundAudio) {
