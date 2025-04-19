@@ -1,0 +1,98 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden; /* Prevent scrollbars */
+}
+
+body {
+    /* Removed font-family as there is no text */
+    /* Removed flexbox alignment as it's not needed */
+    background: linear-gradient(to bottom, #5a4225, #3e2e1a); /* Darker, richer earth gradient */
+    position: relative; /* Needed for absolute positioning */
+}
+
+/* Subtle noise texture for the ground */
+body::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCI+CiAgICA8ZmlsdGVyIGlkPSJub2lzZSI+CiAgICAgICAgPGZlVHVyYnVsZW5jZQogICAgICAgICAgICBiYXNlRnJlcXVlbmN5PSIwLjciCiAgICAgICAgICAgIHN0aXRjaFRpbGVzPSJzdGl0Y2giCiAgICAgICAgICAgIHR5cGU9ImZyYWN0YWxOb2lzZSIvPgogICAgPC9maWx0ZXI+CiAgICA8cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWx0ZXI9InVybCgjbmselvesKSIgb3BhY2l0eT0iMC4wOCIvPgo8L3N2Zz4=');
+    pointer-events: none; /* Allow clicks through */
+    z-index: -1; /* Behind the grass field */
+}
+
+/* Removed old text styles */
+/* ... */
+
+#grass-field {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" style="font-size: 24px;"><text y="24">✋</text></svg>') 16 16, auto;
+    /* Add perspective for potential 3D effects later if needed */
+    perspective: 1000px;
+}
+
+/* Removed old sway animation and other unused styles */
+/* ... */
+
+.grass-blade {
+    position: absolute;
+    /* width/height set by JS */
+    
+    /* Gradient background */
+    background: linear-gradient(to top, 
+        hsl(calc(115 + var(--hue-variation, 0)), 65%, calc(25% + var(--lightness-variation, 0%))), 
+        hsl(calc(120 + var(--hue-variation, 0)), 55%, calc(40% + var(--lightness-variation, 0%)))
+    );
+
+    /* More organic tapered shape */
+    /* clip-path: polygon(0% 100%, 100% 100%, 100% 10%, 70% 0%, 30% 0%, 0% 10%); */
+    clip-path: polygon(20% 100%, 80% 100%, 60% 5%, 50% 0%, 40% 5%);
+
+    transform-origin: bottom center;
+    transition: transform 0.3s cubic-bezier(0.1, 0.7, 0.3, 1);
+
+    /* Subtle shadow for depth */
+    box-shadow: inset 0 -5px 5px -5px rgba(0,0,0,0.4);
+    
+    /* z-index set by JS */
+}
+
+/* Remove remaining old styles */
+/* ... */
+
+@keyframes sway {
+    0%, 100% {
+        transform: rotate(2deg);
+    }
+    50% {
+        transform: rotate(-2deg);
+    }
+}
+
+#message {
+    margin-top: 20px;
+    font-size: 1.1em;
+}
+
+#feedback {
+    margin-top: 10px;
+    min-height: 1.2em; /* Reserve space */
+    font-style: italic;
+    /* color: #555; */
+    color: #005A9C; /* Match heading color */
+}
+
+.feedback-message {
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
+}
+
+.feedback-message.show {
+    opacity: 1;
+} 
