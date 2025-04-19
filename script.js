@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentZoomLevel = 2.5; // New Default Zoom
     let currentDensity = 0.25; // New Default Density
     let currentInteractionRadiusBase = 150; // New Default Base Radius (max slider range)
+    let currentVolume = 0.33; // <<< NEW Default Volume (slider value)
 
     // --- Calculated Interaction Radius (update when zoom or base radius changes) ---
     let interactionRadius = currentInteractionRadiusBase / currentZoomLevel; 
@@ -42,6 +43,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const densityValueSpan = document.getElementById('density-value');
     const radiusSlider = document.getElementById('radius-slider');
     const radiusValueSpan = document.getElementById('radius-value');
+    const volumeSlider = document.getElementById('volume-slider');
+    const volumeValueSpan = document.getElementById('volume-value');
+    const backgroundAudio = document.getElementById('background-audio');
+    const unmutePrompt = document.getElementById('unmute-prompt'); 
 
     // --- Blade Generation Function ---
     function generateBlades() {
@@ -72,6 +77,13 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
         blades.sort((a, b) => a.y - b.y);
+
+        // Set initial audio volume (audio starts muted in HTML)
+        if (backgroundAudio) {
+            backgroundAudio.volume = Math.pow(currentVolume, 3);
+            // Try playing muted initially - might work in some browsers and helps prep audio
+            backgroundAudio.play().catch(e => console.log("Initial muted play failed (can be expected):", e));
+        }
     }
 
     // --- Update and Draw Loop ---
@@ -247,6 +259,13 @@ document.addEventListener('DOMContentLoaded', () => {
         densityValueSpan.textContent = currentDensity.toFixed(2);
         radiusSlider.value = currentInteractionRadiusBase;
         radiusValueSpan.textContent = currentInteractionRadiusBase.toFixed(0);
+        volumeSlider.value = currentVolume;
+        volumeValueSpan.textContent = currentVolume.toFixed(2);
+
+        // Set initial audio volume
+        if (backgroundAudio) {
+            backgroundAudio.volume = Math.pow(currentVolume, 3);
+        }
 
         // Zoom Slider Listener
         zoomSlider.addEventListener('input', (e) => {
@@ -270,6 +289,41 @@ document.addEventListener('DOMContentLoaded', () => {
             interactionRadius = currentInteractionRadiusBase / currentZoomLevel; // Assign, don't redeclare
             // No need to regenerate blades, radius affects drawing loop
         });
+
+        // Volume Slider Listener
+        volumeSlider.addEventListener('input', (e) => {
+            currentVolume = parseFloat(e.target.value);
+            volumeValueSpan.textContent = currentVolume.toFixed(2);
+            if (backgroundAudio) {
+                backgroundAudio.volume = Math.pow(currentVolume, 3);
+            }
+        });
+
+        // Autoplay fallback: try playing on first interaction
+        // REMOVED OLD AUTOPLAY LOGIC
+        // let hasInteracted = false;
+        // function attemptPlay() { ... }
+        // document.addEventListener('click', attemptPlay, { once: true });
+        // document.addEventListener('mousemove', attemptPlay, { once: true });
+
+        // NEW: Unmute overlay listener
+        if (unmutePrompt && backgroundAudio) {
+            unmutePrompt.addEventListener('click', () => {
+                console.log("Prompt clicked, attempting to unmute and play.");
+                backgroundAudio.muted = false;
+                backgroundAudio.volume = Math.pow(currentVolume, 3);
+                // Ensure play is called again after unmuting
+                backgroundAudio.play().then(() => {
+                    console.log("Audio unmuted and playing by user interaction.");
+                }).catch(error => {
+                    console.error("Error playing audio after unmute:", error);
+                });
+                unmutePrompt.style.display = 'none';
+            }, { once: true }); // Only run once
+        } else {
+             if (!unmutePrompt) console.error("Unmute prompt element not found!");
+             if (!backgroundAudio) console.error("Background audio element not found!");
+        }
     }
 
     // --- Initial Setup ---
